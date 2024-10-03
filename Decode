@@ -1,3 +1,4 @@
+
 module decode #(
     parameter XLEN = 32)
     (
@@ -44,4 +45,83 @@ module decode #(
         end
     end
 
+endmodule
+
+
+module tb();
+parameter XLEN = 32;
+localparam ADD_OPCODE = 7'b0110011;   // R-type opcode
+localparam LOAD_OPCODE = 7'b0000011;  // Load opcode
+localparam STORE_OPCODE = 7'b0100011; // Store opcode
+localparam IMM_OPCODE = 7'b0010011;   // Immediate opcode
+
+reg clk;
+reg reset_n;
+reg [XLEN-1:0] current_instruction;
+reg [XLEN-1:0] current_pc;
+wire [3:0] operation;
+wire [$clog2(XLEN)-1:0] src1_addr;
+wire [$clog2(XLEN)-1:0] src2_addr;
+wire [$clog2(XLEN)-1:0] dest_addr;
+wire [XLEN-1:0] imm;
+wire use_imm;
+wire is_load_store;
+
+decode #(
+    .XLEN(XLEN)) 
+inst1 (
+    .clk(clk),
+    .reset_n(reset_n),
+    .current_instruction(current_instruction),
+    .current_pc(current_pc),
+    .operation(operation),
+    .src1_addr(src1_addr),
+    .src2_addr(src2_addr),
+    .dest_addr(dest_addr),
+    .imm(imm),
+    .use_imm(use_imm),
+    .is_load_store(is_load_store));
+
+always #10 clk = ~clk;  // 10ns clock period
+
+initial begin
+    // Initialize signals
+    clk = 0;
+    reset_n = 0;
+    current_instruction = 0;
+    current_pc = 0;
+
+    // Apply reset
+    #10;
+    reset_n = 1;
+    #10;
+
+    // Test case 1: ADD instruction (opcode = 0110011)
+    current_instruction = {7'b0000000, 5'b00001, 5'b00010, 3'b000, 5'b00011, ADD_OPCODE};  // ADD x3 = x1 + x2
+    current_pc = 32'h00000000;
+    #10;
+
+    // Test case 2: SUB instruction (opcode = 0110011, funct7 = 0100000)
+    current_instruction = {7'b0100000, 5'b00001, 5'b00010, 3'b000, 5'b00011, ADD_OPCODE};  // SUB x3 = x1 - x2
+    current_pc = 32'h00000004;
+    #10;
+
+    // Test case 3: Load instruction (opcode = 0000011)
+    current_instruction = {12'b000000000001, 5'b00001, 3'b010, 5'b00011, LOAD_OPCODE};  // Load x3 from memory at offset 1
+    current_pc = 32'h00000008;
+    #10;
+
+    // Test case 4: Store instruction (opcode = 0100011)
+    current_instruction = {7'b0000000, 5'b00001, 5'b00010, 3'b010, 5'b00011, STORE_OPCODE};  // Store x3 to memory at offset 1
+    current_pc = 32'h0000000C;
+    #10;
+
+    // Test case 5: Immediate operation (opcode = 0010011)
+    current_instruction = {12'b000001010001, 5'b00101, 3'b010, 5'b00011, IMM_OPCODE};  // ADDI x3 = x1 + 1
+    current_pc = 32'h00000010;
+    #10;
+
+    // End the test
+    $finish;
+end
 endmodule
