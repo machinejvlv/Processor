@@ -1,1 +1,47 @@
+module decode #(
+    parameter XLEN = 32)
+    (
+    input wire clk,                     // Clock signal
+    input wire reset_n,                 // Active low synchronous reset
+    input wire [XLEN-1:0] current_instruction, // Instruction from Fetch unit
+    input wire [XLEN-1:0] current_pc,   // Current PC from Fetch unit
 
+    output reg [3:0] operation,         // Operation code to Execute unit
+    output reg [$clog2(XLEN)-1:0] src1_addr, // Source 1 register address
+    output reg [$clog2(XLEN)-1:0] src2_addr, // Source 2 register address
+    output reg [$clog2(XLEN)-1:0] dest_addr, // Destination register address
+
+    output reg [XLEN-1:0] imm,          // Immediate value to Execute unit
+    output reg use_imm,                 // Use immediate flag to Execute unit
+    output reg is_load_store            // Load/Store flag for Memory/Writeback
+);
+
+    // Define instruction fields based on the RISC-V format (or adjust as needed)
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            // Reset all output values
+            operation <= 4'b0000;
+            src1_addr <= 0;
+            src2_addr <= 0;
+            dest_addr <= 0;
+            imm <= 0;
+            use_imm <= 0;
+            is_load_store <= 0;
+        end else begin
+            // Decode instruction fields (modify the bits based on your instruction format)
+            operation <= current_instruction[6:3];   // Extract operation code (bits 6:3)
+            src1_addr <= current_instruction[19:15]; // Extract rs1 (bits 19:15)
+            src2_addr <= current_instruction[24:20]; // Extract rs2 (bits 24:20)
+            dest_addr <= current_instruction[11:7];  // Extract destination register (bits 11:7)
+            imm <= current_instruction[31:20];       // Extract immediate value (bits 31:20)
+
+            // Determine if the instruction uses an immediate value
+            use_imm <= (current_instruction[6:0] == 7'b0010011); // Example opcode for immediate
+
+            // Determine if it's a Load/Store instruction
+            is_load_store <= (current_instruction[6:0] == 7'b0000011 ||  // Load
+                              current_instruction[6:0] == 7'b0100011);   // Store
+        end
+    end
+
+endmodule
