@@ -1,1 +1,110 @@
+module RF #(
+    parameter XLEN = 32,         // Register width
+    parameter REG_DEPTH = 32     // Number of registers (e.g., 32 for RISC-V)
+)(
+    input wire clk,                  // Clock signal
+    input wire reset_n,              // Active-low reset signal
 
+    // Write Port
+    input wire [4:0] write_addr,     // Write register address (5 bits for 32 registers)
+    input wire [XLEN-1:0] write_data, // Data to be written to the register
+    input wire write_enable,         // Write enable signal
+
+    // Read Ports
+    input wire [4:0] read_addr1,     // Address for reading register 1
+    input wire [4:0] read_addr2,     // Address for reading register 2
+    output wire [XLEN-1:0] read_data1, // Output for register 1
+    output wire [XLEN-1:0] read_data2  // Output for register 2
+);
+
+    // Register memory
+    reg [XLEN-1:0] reg_array [0:REG_DEPTH-1];
+
+    // Initialize specific values to the register file
+    integer i;
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            // On reset, initialize the register values to non-zero values except register 0
+            reg_array[0] <= 0;              // Register 0 is always zero
+            reg_array[1] <= 32'hDEADBEEF;    // Example non-zero value for register 1
+            reg_array[2] <= 32'hCAFEBABE;    // Example non-zero value for register 2
+            reg_array[3] <= 32'h12345678;    // Example non-zero value for register 3
+            // Initialize all remaining registers with default values
+            for (i = 4; i < REG_DEPTH; i = i + 1) begin
+                reg_array[i] <= i; // Assigning non-zero values based on the index
+            end
+        end else begin
+            // Write to register if write_enable is high and not writing to register 0
+            if (write_enable && write_addr != 5'b00000) begin
+                reg_array[write_addr] <= write_data;
+            end
+        end
+    end
+
+    // Read register 1 (asynchronous read)
+    assign read_data1 = (read_addr1 != 5'b00000) ? reg_array[read_addr1] : 0;
+
+    // Read register 2 (asynchronous read)
+    assign read_data2 = (read_addr2 != 5'b00000) ? reg_array[read_addr2] : 0;
+
+endmodule
+
+
+module tb();
+    reg clk;
+    reg reset_n;
+    reg [4:0] write_addr;
+    reg [31:0] write_data;
+    reg write_enable;
+    reg [4:0] read_addr1;
+    reg [4:0] read_addr2;
+    wire [31:0] read_data1;
+    wire [31:0] read_data2;
+
+    // Instantiate the register file
+    RF inst1 (
+        .clk(clk),
+        .reset_n(reset_n),
+        .write_addr(write_addr),
+        .write_data(write_data),
+        .write_enable(write_enable),
+        .read_addr1(read_addr1),
+        .read_addr2(read_addr2),
+        .read_data1(read_data1),
+        .read_data2(read_data2)
+    );
+
+    // Clock generation
+    always #5 clk = ~clk;
+
+    initial begin
+        // Initialize inputs
+        clk = 0;
+        reset_n = 0;
+        write_addr = 0;
+        write_data = 0;
+        write_enable = 0;
+        read_addr1 = 0;
+        read_addr2 = 0;
+
+        // Apply reset
+        #10 reset_n = 1;
+
+        // Read from register 1 (initialized to DEADBEEF)
+        #10 read_addr1 = 5'd1;
+            read_addr2 = 5'd2;  // Initialized to CAFEBABE
+
+        // Check results
+        #10 $display("Read Data 1 (Reg 1): %h, Read Data 2 (Reg 2): %h", read_data1, read_data2);
+
+        // Test reading register 3 (initialized to 12345678)
+        #10 read_addr1 = 5'd3;
+            read_addr2 = 5'd4;  // Initialized to 4
+
+        // Check results
+        #10 $display("Read Data 1 (Reg 3): %h, Read Data 2 (Reg 4): %h", read_data1, read_data2);
+
+        // Finish simulation
+        #10 $finish;
+    end
+endmodule
