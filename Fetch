@@ -1,4 +1,4 @@
-odule Fetch #(
+module Fetch #(
     parameter XLEN = 32
 )(
     input wire clk,                         // Clock signal
