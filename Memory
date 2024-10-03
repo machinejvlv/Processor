@@ -1,1 +1,102 @@
+module Memory #(
+parameter XLEN = 32,          // Data width (32-bit)
+   parameter MEM_DEPTH = 1024    // Memory depth (number of entries)
+)
+( input wire clk,               // Clock signal
+  input wire reset_n,           // Active-low reset
+   input wire write_enable,      // Write enable signal
+   input wire is_load_store,     // Load/Store flag
+   input wire [XLEN-1:0] address,  // Memory address
+   input wire [XLEN-1:0] data_in,  // Data to be written (during store)
+   output reg [XLEN-1:0] data_out  // Data read from memory (during load)
+);
 
+   // Memory array
+   reg [XLEN-1:0] memory_array [0:MEM_DEPTH-1];
+
+   // Random initialization for memory array (to avoid 0 outputs)
+   integer i;
+   initial begin
+       for (i = 0; i < MEM_DEPTH; i = i + 1) begin
+           memory_array[i] = $random;   // Initialize with random values
+       end
+   end
+
+   // Memory access logic
+   always @(posedge clk or negedge reset_n) begin
+       if (!reset_n) begin
+           // Reset: Clear data_out on reset
+           data_out <= {XLEN{1'b0}};
+       end else if (is_load_store) begin
+           if (write_enable) begin
+               // Store operation: Write data into memory
+               memory_array[address] <= data_in;
+           end else begin
+               // Load operation: Read data from memory
+               data_out <= memory_array[address];
+           end
+       end
+   end
+
+endmodule
+
+
+
+module tb();
+
+reg clk;
+reg reset_n;
+    reg write_enable;
+    reg is_load_store;
+    reg [31:0] address;
+    reg [31:0] data_in;
+    wire [31:0] data_out;
+
+    // Instantiate the memory unit
+    Memory inst1 (
+        .clk(clk),
+        .reset_n(reset_n),
+        .write_enable(write_enable),
+        .is_load_store(is_load_store),
+        .address(address),
+        .data_in(data_in),
+        .data_out(data_out)
+    );
+
+    // Clock generation
+    always #5 clk = ~clk;
+
+    initial begin
+        // Initialize signals
+        clk = 0;
+        reset_n = 0;
+        write_enable = 0;
+        is_load_store = 0;
+        address = 0;
+        data_in = 0;
+
+        // Apply reset
+        #10 reset_n = 1;
+
+        // Write operation: Write 32'hDEADBEEF to address 0x10
+        #10 is_load_store = 1;
+            write_enable = 1;
+            address = 32'h10;
+            data_in = 32'hDEADBEEF;
+
+        // Wait for write to complete
+        #10 write_enable = 0;
+
+        // Read operation: Read from address 0x10
+        #10 is_load_store = 1;
+            write_enable = 0;
+            address = 32'h10;
+
+        // Observe data_out (should be 32'hDEADBEEF)
+        #10 $display("Data at address 0x10: %h", data_out);
+
+        // Wait and finish simulation
+        #20 $finish;
+    end
+
+endmodule
