@@ -1,1 +1,118 @@
+odule Fetch #(
+    parameter XLEN = 32
+)(
+    input wire clk,                         // Clock signal
+    input wire reset_n,                     // Active low reset signal
+    input wire branch_taken,                // Signal from Execute unit indicating branch taken
+    input wire [XLEN-1:0] next_instruction, // Instruction fetched from memory
+    input wire [XLEN-1:0] branch_target,    // Target PC for branch
 
+    output reg [XLEN-1:0] current_instruction, // Current instruction sent to Decode unit
+    output reg [XLEN-1:0] next_pc,             // Next PC sent to Instruction memory
+    output reg [XLEN-1:0] current_pc           // Current PC sent to Decode unit
+);
+
+    // Internal signal to hold the 12-bit immediate value from the current instruction
+    wire [31:20] imm12;
+
+    // Assign the last 12 bits of the current instruction to the imm12 wire
+    assign imm12 = current_instruction[31:20];
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            // Reset PC and instruction
+            current_pc <= 0;
+            next_pc <= 4;   // Assuming PC increments by 4 bytes
+            current_instruction <= 0;
+        end else begin
+            // If branch is taken, update PC to branch target
+            if (branch_taken) begin
+                current_pc <= branch_target;
+                next_pc <= branch_target + 4;
+            end else begin
+                // Update the current PC with the next PC
+                current_pc <= next_pc;
+
+                // Modify PC using the last 12 bits of the current instruction
+                next_pc <= current_pc + { {20{imm12[31]}}, imm12 }; // Sign-extended 12-bit immediate
+            end
+
+            // Fetch the next instruction (in a real scenario, fetched from instruction memory)
+            current_instruction <= next_instruction;
+        end
+    end
+
+endmodule
+
+
+module tb();
+// Parameters
+    parameter XLEN = 32;
+
+    // Testbench signals
+    reg clk;
+    reg reset_n;
+    reg branch_taken;
+    reg [XLEN-1:0] branch_target;
+    reg [XLEN-1:0] next_instruction;
+    wire [XLEN-1:0] current_instruction;
+    wire [XLEN-1:0] current_pc;
+    wire [XLEN-1:0] next_pc;
+
+    // Instantiate the fetch unit
+    Fetch #(
+        .XLEN(XLEN)
+    ) inst1 (
+        .clk(clk),
+        .reset_n(reset_n),
+        .branch_taken(branch_taken),
+        .branch_target(branch_target),
+        .next_instruction(next_instruction),
+        .current_instruction(current_instruction),
+        .current_pc(current_pc),
+        .next_pc(next_pc)
+    );
+
+    // Clock generation: 10ns clock period
+    always #5 clk = ~clk;
+
+    // Test sequence
+    initial begin
+        // Initialize signals
+        clk = 0;
+        reset_n = 0;
+        branch_taken = 0;
+        branch_target = 32'h00000000;
+        next_instruction = 32'h00000000;
+
+        // Apply reset
+        #10 reset_n = 1;   // Deassert reset after 10ns
+
+        // Test case 1: Normal PC increment without branch
+        next_instruction = 32'h12345678;  // Example instruction
+        #10;  // Wait for 10ns
+
+        next_instruction = 32'h9ABCDEF0;  // Next instruction
+        #10;  // Wait for another 10ns
+
+        // Test case 2: Branch taken
+        branch_taken = 1;                // Branch is taken
+        branch_target = 32'h00000040;    // Branch target address
+        next_instruction = 32'h13579BDF; // New instruction after branch
+        #10;  // Wait for 10ns
+
+        branch_taken = 0;  // Disable branching
+        next_instruction = 32'h2468ACE0;  // Next instruction post-branch
+        #10;  // Wait for 10ns
+
+        // Finish simulation
+        $finish;
+    end
+
+    // Monitor outputs
+    initial begin
+        $monitor("Time: %0t | Current PC: %h | Next PC: %h | Current Instruction: %h", 
+                 $time, current_pc, next_pc, current_instruction);
+    end
+
+endmodule
