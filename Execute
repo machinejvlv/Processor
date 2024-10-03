@@ -1,1 +1,231 @@
+module Execute(
+    input wire clk,                        // Clock signal (posedge)
+    input wire reset_n,                    // Active low reset signal
 
+    input wire [3:0] operation,            // Operation code from decoder
+    input wire [31:0] imm,                 // Immediate value from decoder
+    input wire use_imm,                    // Flag to use immediate value
+    input wire [31:0] operand_a,           // Operand A (rs1) from register file
+    input wire [31:0] operand_b,           // Operand B (rs2) from register file
+
+    output reg branch_taken,               // Branch taken flag (output to fetch)
+    output reg [31:0] result               // Result sent to memory unit/writeback
+);
+
+    // Define operation codes
+    localparam ADD  = 4'b0000;
+    localparam SUB  = 4'b0001;
+    localparam AND  = 4'b0010;
+    localparam OR   = 4'b0011;
+    localparam XOR  = 4'b0100;
+    localparam SLL  = 4'b0101; // Shift left logical
+    localparam SRL  = 4'b0110; // Shift right logical
+    localparam BEQ  = 4'b0111; // Branch if equal
+
+    always @(posedge clk or negedge reset_n) begin
+        if (reset_n) begin
+            // Reset output signals
+            branch_taken = 0;
+            result = 0;
+        end else begin
+            // Execute based on the operation
+            case (operation)
+                ADD: begin
+                    if (use_imm)
+                        result = operand_a + imm;
+                    else
+                        result <= operand_a + operand_b;
+                end
+                SUB: begin
+                    if (use_imm)
+                        result <= operand_a - imm;
+                    else
+                        result <= operand_a - operand_b;
+                end
+                AND: begin
+                    if (use_imm)
+                        result <= operand_a & imm;
+                    else
+                        result <= operand_a & operand_b;
+                end
+                OR: begin
+                    if (use_imm)
+                        result <= operand_a | imm;
+                    else
+                        result <= operand_a | operand_b;
+                end
+                XOR: begin
+                    if (use_imm)
+                        result <= operand_a ^ imm;
+                    else
+                        result <= operand_a ^ operand_b;
+                end
+                SLL: begin
+                    if (use_imm)
+                        result <= operand_a << imm[4:0]; // Shift by the lower 5 bits of imm
+                    else
+                        result <= operand_a << operand_b[4:0]; // Shift by the lower 5 bits of operand_b
+                end
+                SRL: begin
+                    if (use_imm)
+                        result <= operand_a >> imm[4:0]; // Shift by the lower 5 bits of imm
+                    else
+                        result <= operand_a >> operand_b[4:0]; // Shift by the lower 5 bits of operand_b
+                end
+                BEQ: begin
+                    // Check for branch if equal condition
+                    branch_taken <= (operand_a == operand_b);
+                    result <= 0; // Result is not relevant for BEQ
+                end
+                default: begin
+                    result <= 0; // Default case to avoid latches
+                    branch_taken <= 0;
+                end
+            endcase
+        end
+    end
+endmodule
+
+
+module tb();
+  reg clk;                          // Clock signal
+  reg reset_n;                      // Reset signal
+  reg [3:0] operation;              // Operation code
+  reg [31:0] imm;                   // Immediate value
+  reg use_imm;                      // Flag for immediate use
+  reg [31:0] operand_a;             // Operand A
+  reg [31:0] operand_b;             // Operand B
+
+  // Outputs from the ALU module
+  wire branch_taken;                // Branch taken flag
+  wire [31:0] result;               // Result of the operation
+
+  // Instantiate the ALU module
+  Execute inst1 (
+      .clk(clk),
+      .reset_n(reset_n),
+      .operation(operation),
+      .imm(imm),
+      .use_imm(use_imm),
+      .operand_a(operand_a),
+      .operand_b(operand_b),
+      .branch_taken(branch_taken),
+      .result(result)
+  );
+
+  // Clock generation
+     
+      always #5 clk = ~clk;  // Toggle clock every 5 ns
+  
+
+  // Test sequence
+  initial begin
+      clk = 1;  // Initialize clock
+  
+      // Initialize inputs
+      reset_n = 1;  // Assert reset
+      operation = 4'b0000; // ADD
+      imm = 32'h0;
+      use_imm = 0;
+      operand_a = 32'h0000000A; // Operand A: 10
+      operand_b = 32'h00000005; // Operand B: 5
+
+      // Wait for a few clock cycles
+      #10;
+      reset_n = 0; // Release reset
+
+      // Test ADD operation
+      #10;
+      operation = 4'b0000;  // ADD
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h0000000A; // 10
+      operand_b = 32'h00000005; // 5; Expected result: 15
+
+      // Wait for result
+      #10;
+      $display("ADD: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Test SUB operation
+      #10;
+      operation = 4'b0001;  // SUB
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h0000000A; // 10
+      operand_b = 32'h00000005; // 5; Expected result: 5
+
+      // Wait for result
+      #10;
+      $display("SUB: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Test AND operation
+      #10;
+      operation = 4'b0010;  // AND
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h0000000A; // 10 (0000 1010)
+      operand_b = 32'h00000005; // 5  (0000 0101); Expected result: 0 (0000 0000)
+
+      // Wait for result
+      #10;
+      $display("AND: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Test OR operation
+      #10;
+      operation = 4'b0011;  // OR
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h0000000A; // 10
+      operand_b = 32'h00000005; // 5; Expected result: 15
+
+      // Wait for result
+      #10;
+      $display("OR: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Test XOR operation
+      #10;
+      operation = 4'b0100;  // XOR
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h0000000A; // 10
+      operand_b = 32'h00000005; // 5; Expected result: 15
+
+      // Wait for result
+      #10;
+      $display("XOR: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Test Shift Left Logical
+      #10;
+      operation = 4'b0101;  // SLL
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h00000001; // 1
+      operand_b = 32'h00000002; // 2; Expected result: 4
+
+      // Wait for result
+      #10;
+      $display("SLL: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Test Shift Right Logical
+      #10;
+      operation = 4'b0110;  // SRL
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h00000004; // 4
+      operand_b = 32'h00000002; // 2; Expected result: 1
+
+      // Wait for result
+      #10;
+      $display("SRL: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Test Branch Equal
+      #10;
+      operation = 4'b0111;  // BEQ
+      use_imm = 0;          // Not using immediate
+      operand_a = 32'h00000005; // 5
+      operand_b = 32'h00000005; // 5; Expected branch_taken: 1
+
+      // Wait for result
+      #10;
+      $display("BEQ: result = %d, branch_taken = %b", result, branch_taken);
+
+      // Finish simulation
+      #200;
+      $finish;
+  end
+endmodule
+
+  
