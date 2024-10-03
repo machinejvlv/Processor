@@ -1,1 +1,98 @@
 
+module WB #(
+    parameter XLEN = 32   // Data width
+)(
+    input wire clk,                  // Clock signal
+    input wire reset_n,              // Active-low reset signal
+
+    // Inputs from memory or ALU
+    input wire [XLEN-1:0] alu_result,    // Result from ALU
+    input wire [XLEN-1:0] mem_data,      // Data loaded from memory
+    input wire mem_to_reg,               // Control signal: 1 -> use mem_data, 0 -> use alu_result
+
+    // Register file interface
+    input wire [$clog2(XLEN)-1:0] dest_addr,  // Destination register address
+    input wire reg_write_en,              // Enable signal to write to register file
+    output reg [XLEN-1:0] writeback_data, // Data to be written back to the register file
+    output reg [$clog2(XLEN)-1:0] reg_addr  // Address of the register to write back to
+);
+
+    always @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            // Reset outputs
+            writeback_data <= 0;
+            reg_addr <= 0;
+        end else begin
+            if (reg_write_en) begin
+                // Choose between ALU result and memory data based on mem_to_reg signal
+                writeback_data <= mem_to_reg ? mem_data : alu_result;
+                reg_addr <= dest_addr;  // Destination register to write back to
+            end
+        end
+    end
+
+endmodule
+
+
+module tb();
+    reg clk;
+    reg reset_n;
+    reg [31:0] alu_result;
+    reg [31:0] mem_data;
+    reg mem_to_reg;
+    reg [4:0] dest_addr;
+    reg reg_write_en;
+    wire [31:0] writeback_data;
+    wire [4:0] reg_addr;
+
+    // Instantiate the Writeback Unit
+    WB inst1 (
+        .clk(clk),
+        .reset_n(reset_n),
+        .alu_result(alu_result),
+        .mem_data(mem_data),
+        .mem_to_reg(mem_to_reg),
+        .dest_addr(dest_addr),
+        .reg_write_en(reg_write_en),
+        .writeback_data(writeback_data),
+        .reg_addr(reg_addr)
+    );
+
+    // Clock generation
+    always #5 clk = ~clk;
+
+    initial begin
+        // Initialize inputs
+        clk = 0;
+        reset_n = 0;
+        alu_result = 32'hA5A5A5A5;
+        mem_data = 32'h5A5A5A5A;
+        mem_to_reg = 0;    // Select ALU result by default
+        dest_addr = 5'h1F; // Write to register 31
+        reg_write_en = 0;
+
+        // Apply reset
+        #10 reset_n = 1;
+
+        // Test writing ALU result to register
+        #10 reg_write_en = 1;
+            mem_to_reg = 0; // Use ALU result
+            alu_result = 32'h12345678;
+
+        #10 $display("Writeback Data (ALU): %h, Reg Addr: %h", writeback_data, reg_addr);
+
+        // Test writing memory data to register
+        #10 mem_to_reg = 1; // Use memory data
+            mem_data = 32'h87654321;
+
+        #10 $display("Writeback Data (Memory): %h, Reg Addr: %h", writeback_data, reg_addr);
+
+        // Test reset condition
+        #10 reset_n = 0;
+
+        #10 $display("After reset - Writeback Data: %h, Reg Addr: %h", writeback_data, reg_addr);
+
+        // Finish simulation
+        #10 $finish;
+    end
+endmodule
